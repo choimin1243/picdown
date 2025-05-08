@@ -6,7 +6,6 @@ import base64
 import pandas as pd
 import matplotlib.font_manager as fm
 import platform
-import koreanize_matplotlib
 
 def set_matplotlib_korean_font():
     """한글 폰트 설정 함수"""
