@@ -10,112 +10,39 @@ import os
 import matplotlib as mpl
 from matplotlib import font_manager
 
-def download_nanum_font():
-    """Nanum 폰트를 다운로드하고 설치합니다"""
-    import requests
-    import zipfile
+def setup_local_korean_font():
+    """로컬 한글 폰트 설정 함수"""
+    # 현재 디렉토리에 있는 폰트 파일 경로
+    font_path = 'NanumGothic-Bold.ttf'
     
-    # NanumGothic 폰트 다운로드 URL
-    font_url = "https://github.com/naver/nanumfont/raw/master/NanumFont_TTF_ALL.zip"
-    
-    # 폰트 저장 경로
-    font_dir = os.path.join(os.path.expanduser("~"), ".fonts")
-    os.makedirs(font_dir, exist_ok=True)
-    
-    # 이미 폰트가 존재하는지 확인
-    if os.path.exists(os.path.join(font_dir, "NanumGothic.ttf")):
-        st.success("나눔 폰트가 이미 설치되어 있습니다.")
-        return True
-    
-    try:
-        # 폰트 다운로드
-        st.info("나눔 폰트 다운로드 중...")
-        response = requests.get(font_url, stream=True)
-        
-        if response.status_code == 200:
-            zip_path = os.path.join(font_dir, "nanum_fonts.zip")
+    # 폰트 파일이 존재하는지 확인
+    if os.path.exists(font_path):
+        try:
+            # 폰트 등록
+            font_manager.fontManager.addfont(font_path)
+            font_name = 'NanumGothic'
             
-            # 다운로드한 파일 저장
-            with open(zip_path, 'wb') as f:
-                f.write(response.content)
+            # 폰트 설정
+            plt.rcParams['font.family'] = 'sans-serif'
+            plt.rcParams['font.sans-serif'] = [font_name, 'sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
             
-            # 압축 해제
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(font_dir)
+            # matplotlib 전체 설정에도 추가
+            mpl.rcParams['font.sans-serif'] = [font_name, 'DejaVu Sans', 'Bitstream Vera Sans',
+                                      'Computer Modern Sans Serif', 'Lucida Grande',
+                                      'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica',
+                                      'Avant Garde', 'sans-serif']
             
-            # 압축 파일 삭제
-            os.remove(zip_path)
-            
-            # 폰트 캐시 업데이트
-            font_manager.fontManager.addfont(os.path.join(font_dir, "NanumGothic.ttf"))
-            
-            st.success("나눔 폰트가 성공적으로 설치되었습니다.")
+            st.success(f"나눔고딕 볼드 폰트가 성공적으로 설정되었습니다.")
             return True
-        else:
-            st.error(f"폰트 다운로드 실패: {response.status_code}")
+        except Exception as e:
+            st.error(f"폰트 설정 중 오류 발생: {str(e)}")
             return False
-            
-    except Exception as e:
-        st.error(f"폰트 설치 중 오류 발생: {str(e)}")
+    else:
+        st.error(f"폰트 파일을 찾을 수 없습니다: {font_path}")
         return False
 
-def set_matplotlib_korean_font():
-    """한글 폰트 설정 함수"""
-    system_name = platform.system()
-    
-    # 기본 폰트 설정
-    if system_name == "Windows":
-        # 윈도우의 경우 맑은 고딕 폰트 사용
-        font_name = "Malgun Gothic"
-    elif system_name == "Darwin":  # macOS
-        font_name = "AppleGothic"
-    else:  # Linux 등
-        font_name = "NanumGothic"
-    
-    # 폰트가 시스템에 있는지 확인
-    font_found = False
-    available_fonts = [f.name for f in font_manager.fontManager.ttflist]
-    
-    if font_name in available_fonts:
-        font_found = True
-    elif "NanumGothic" in available_fonts:
-        font_name = "NanumGothic"
-        font_found = True
-    elif "NanumBarunGothic" in available_fonts:
-        font_name = "NanumBarunGothic"
-        font_found = True
-    elif "Noto Sans CJK KR" in available_fonts:
-        font_name = "Noto Sans CJK KR"
-        font_found = True
-    elif "Noto Sans KR" in available_fonts:
-        font_name = "Noto Sans KR"
-        font_found = True
-    
-    # 폰트가 없으면 기본 상태로 진행
-    if not font_found:
-        st.warning("시스템에 한글 폰트가 없습니다. 폰트 설치를 시도합니다.")
-        try:
-            download_nanum_font()
-            # 폰트 다시 확인
-            font_manager._rebuild()
-            if "NanumGothic" in [f.name for f in font_manager.fontManager.ttflist]:
-                font_name = "NanumGothic"
-                font_found = True
-        except:
-            st.error("폰트 설치에 실패했습니다. 그래프의 한글이 제대로 표시되지 않을 수 있습니다.")
-    
-    # 폰트 설정
-    plt.rcParams['font.family'] = 'sans-serif'
-    plt.rcParams['font.sans-serif'] = [font_name, 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
-    
-    # 테스트 폰트로 사용할 서체 설정
-    mpl.rcParams['font.sans-serif'] = [font_name, 'DejaVu Sans', 'Bitstream Vera Sans',
-                                 'Computer Modern Sans Serif', 'Lucida Grande',
-                                 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica',
-                                 'Avant Garde', 'sans-serif']
-
-def create_custom_profile_graph(df):
+def create_custom_profile_graph(df, use_korean=True):
     if len(df) < 2:
         st.error("최소 2개의 점이 필요합니다.")
         return None
@@ -128,17 +55,33 @@ def create_custom_profile_graph(df):
     # 그래프 생성
     fig, ax1 = plt.subplots(figsize=(10, 6))
     
+    # 한글 또는 영어 레이블 설정
+    if use_korean:
+        temp_label = '온도'
+        humidity_label = '습도'
+        x_label = '시간(h)'
+        y1_label = '온도(°C)'
+        y2_label = '습도(% R.H.)'
+        title = '온습도 프로파일'
+    else:
+        temp_label = 'Temperature'
+        humidity_label = 'Humidity'
+        x_label = 'Time(h)'
+        y1_label = 'Temperature(°C)'
+        y2_label = 'Humidity(% R.H.)'
+        title = 'Temperature & Humidity Profile'
+    
     # 온도 그래프 (왼쪽 y축)
-    ax1.set_xlabel('시간(h)')
-    ax1.set_ylabel('온도(°C)', color='red')
-    ax1.plot(time_points, temp_points, 'r-', linewidth=2, marker='o', label='온도')
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel(y1_label, color='red')
+    ax1.plot(time_points, temp_points, 'r-', linewidth=2, marker='o', label=temp_label)
     ax1.tick_params(axis='y', labelcolor='red')
     ax1.grid(True, linestyle='--', alpha=0.7)
     
     # 습도 그래프 (오른쪽 y축)
     ax2 = ax1.twinx()
-    ax2.set_ylabel('습도(% R.H.)', color='blue')
-    ax2.plot(time_points, humidity_points, 'b-', linewidth=2, marker='o', label='습도')
+    ax2.set_ylabel(y2_label, color='blue')
+    ax2.plot(time_points, humidity_points, 'b-', linewidth=2, marker='o', label=humidity_label)
     ax2.tick_params(axis='y', labelcolor='blue')
     
     # 주요 시간 포인트에 수직선 추가
@@ -149,22 +92,22 @@ def create_custom_profile_graph(df):
     ax1.set_xticks(time_points)
     ax1.set_xticklabels([f"{t}" for t in time_points])
     
-    # 범례 추가 (ASCII로 변경)
-    ax1.legend(['Temperature'], loc='upper left')
-    ax2.legend(['Humidity'], loc='upper right')
+    # 범례 추가
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
     
     # 그리드 설정
     plt.grid(True, linestyle='--', alpha=0.7)
     
-    # 그래프 제목 (ASCII로 변경)
-    plt.title('Temperature & Humidity Profile')
+    # 그래프 제목
+    plt.title(title)
     
     # 그래프 여백 조정
     plt.tight_layout()
     
     return fig
 
-def get_image_download_link(fig, filename="temperature_profile.png", text="Download Graph"):
+def get_image_download_link(fig, filename="temperature_profile.png", text="그래프 다운로드"):
     """이미지 다운로드 링크 생성"""
     if fig is None:
         return ""
@@ -178,7 +121,7 @@ def get_image_download_link(fig, filename="temperature_profile.png", text="Downl
 
 def main():
     # 앱 시작 시 한글 폰트 설정
-    set_matplotlib_korean_font()
+    font_available = setup_local_korean_font()
     
     st.title("온습도 프로파일 생성기 - 사용자 정의 포인트")
     
@@ -202,8 +145,6 @@ def main():
         
         if not available_fonts:
             st.error("한글 폰트가 발견되지 않았습니다.")
-            if st.button("나눔 폰트 설치 시도"):
-                download_nanum_font()
         else:
             st.success(f"발견된 한글 폰트: {', '.join(available_fonts)}")
     
@@ -296,10 +237,10 @@ def main():
     if len(st.session_state.profile_df) >= 2:
         if language_option == "영어":
             # 영어로 그래프 생성
-            fig = create_custom_profile_graph(st.session_state.profile_df)
+            fig = create_custom_profile_graph(st.session_state.profile_df, use_korean=False)
         else:
-            # 한글로 그래프 생성 (기존 함수 사용)
-            fig = create_custom_profile_graph(st.session_state.profile_df)
+            # 한글로 그래프 생성
+            fig = create_custom_profile_graph(st.session_state.profile_df, use_korean=True)
             
         if fig:
             st.pyplot(fig)
