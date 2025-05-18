@@ -6,248 +6,300 @@ import base64
 import pandas as pd
 import matplotlib.font_manager as fm
 import platform
-import os
-import matplotlib as mpl
-from matplotlib import font_manager
+from matplotlib.gridspec import GridSpec
 
-def setup_local_korean_font():
-    """로컬 한글 폰트 설정 함수"""
-    # 현재 디렉토리에 있는 폰트 파일 경로
-    font_path = 'NanumGothic-Bold.ttf'
-    
-    # 폰트 파일이 존재하는지 확인
-    if os.path.exists(font_path):
-        try:
-            # 폰트 등록
-            font_manager.fontManager.addfont(font_path)
-            font_name = 'NanumGothic'
-            
-            # 폰트 설정
-            plt.rcParams['font.family'] = 'sans-serif'
-            plt.rcParams['font.sans-serif'] = [font_name, 'sans-serif']
-            plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
-            
-            # matplotlib 전체 설정에도 추가
-            mpl.rcParams['font.sans-serif'] = [font_name, 'DejaVu Sans', 'Bitstream Vera Sans',
-                                      'Computer Modern Sans Serif', 'Lucida Grande',
-                                      'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica',
-                                      'Avant Garde', 'sans-serif']
-            
-            st.success(f"나눔고딕 볼드 폰트가 성공적으로 설정되었습니다.")
-            return True
-        except Exception as e:
-            st.error(f"폰트 설정 중 오류 발생: {str(e)}")
-            return False
+def set_matplotlib_font():
+    system_name = platform.system()
+    if system_name == "Windows":
+        font_name = "Arial"
+    elif system_name == "Darwin":
+        font_name = "Arial"
     else:
-        st.error(f"폰트 파일을 찾을 수 없습니다: {font_path}")
-        return False
+        font_name = "Arial"
+    plt.rcParams['font.family'] = font_name
+    plt.rcParams['axes.unicode_minus'] = False
 
-def create_custom_profile_graph(df, use_korean=True):
-    if len(df) < 2:
-        st.error("최소 2개의 점이 필요합니다.")
+def create_stepped_profile_graph(df):
+    if len(df) < 1:
+        st.error("At least 1 point is required.")
         return None
+
+    set_matplotlib_font()
+
+    # Check segments to truncate (segments with 90+ hours)
+    segment_times = df['Segment Time'].tolist()
+    truncated_segments = [time >= 90 for time in segment_times]
     
-    # 데이터프레임에서 시간, 온도, 습도 추출
-    time_points = df['시간(h)'].tolist()
-    temp_points = df['온도(°C)'].tolist()
-    humidity_points = df['습도(%)'].tolist()
+    # Calculate cumulative display time
+    cumulative_display_time = [0]  # Start at 0
+    current_time = 0
     
-    # 그래프 생성
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    # Calculate actual display time for each segment
+    for i, time in enumerate(segment_times):
+        if truncated_segments[i]:  # 90+ hour segment
+            current_time += 1  # Show only the last 1 hour
+        else:  # Less than 90 hour segment
+            current_time += time  # Show full time
+        cumulative_display_time.append(current_time)
     
-    # 한글 또는 영어 레이블 설정
-    if use_korean:
-        temp_label = '온도'
-        humidity_label = '습도'
-        x_label = '시간(h)'
-        y1_label = '온도(°C)'
-        y2_label = '습도(% R.H.)'
-        title = '온습도 프로파일'
+    # Temperature and humidity points
+    temp_points = df['Temperature(°C)'].tolist()
+    humidity_points = df['Humidity(%)'].tolist()
+    
+    # Generate detailed time, temperature, and humidity data
+    detailed_times = []
+    detailed_temps = []
+    detailed_humidity = []
+    
+    # Handle first segment
+    first_temp = temp_points[0]
+    first_humidity = humidity_points[0]
+    
+    # Process first segment differently based on its length
+    if truncated_segments[0]:
+        # 90+ hours - include only the last hour
+        segment_start = cumulative_display_time[0]  # 0
+        segment_end = cumulative_display_time[1]    # 1
+        real_start = segment_times[0] - 1           # Total time - 1
+        real_end = segment_times[0]                 # Total time
+        
+        # Generate detailed data for the last hour
+        for t in np.linspace(segment_start, segment_end, 20):
+            # Convert t to real time (0-1 range -> (total time-1)-total time range)
+            real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
+            real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
+            
+            detailed_times.append(t)  # Display time
+            detailed_temps.append(first_temp)  # First segment has constant value
+            detailed_humidity.append(first_humidity)  # First segment has constant value
     else:
-        temp_label = 'Temperature'
-        humidity_label = 'Humidity'
-        x_label = 'Time(h)'
-        y1_label = 'Temperature(°C)'
-        y2_label = 'Humidity(% R.H.)'
-        title = 'Temperature & Humidity Profile'
+        # Less than 90 hours - include the whole segment
+        segment_start = cumulative_display_time[0]
+        segment_end = cumulative_display_time[1]
+        
+        for t in np.linspace(segment_start, segment_end, 20):
+            detailed_times.append(t)
+            detailed_temps.append(first_temp)
+            detailed_humidity.append(first_humidity)
     
-    # 온도 그래프 (왼쪽 y축)
-    ax1.set_xlabel(x_label)
-    ax1.set_ylabel(y1_label, color='red')
-    ax1.plot(time_points, temp_points, 'r-', linewidth=2, marker='o', label=temp_label)
-    ax1.tick_params(axis='y', labelcolor='red')
+    # Process remaining segments
+    for i in range(1, len(temp_points)):
+        current_temp = temp_points[i-1]
+        next_temp = temp_points[i]
+        current_humidity = humidity_points[i-1]
+        next_humidity = humidity_points[i]
+        
+        # Current segment's display start/end time
+        segment_start = cumulative_display_time[i]
+        segment_end = cumulative_display_time[i+1]
+        
+        if truncated_segments[i]:
+            # 90+ hour segment - map real time to display time
+            real_start = segment_times[i] - 1  # Total time - 1
+            real_end = segment_times[i]        # Total time
+            
+            for t in np.linspace(segment_start, segment_end, 20)[1:]:
+                # Convert t to real time
+                real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
+                real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
+                
+                detailed_times.append(t)  # Display time
+                detailed_temps.append(current_temp + real_ratio * (next_temp - current_temp))
+                detailed_humidity.append(current_humidity + real_ratio * (next_humidity - current_humidity))
+        else:
+            # Less than 90 hour segment - normal processing
+            for t in np.linspace(segment_start, segment_end, 20)[1:]:
+                ratio = (t - segment_start) / (segment_end - segment_start) if segment_end > segment_start else 0
+                
+                detailed_times.append(t)
+                detailed_temps.append(current_temp + ratio * (next_temp - current_temp))
+                detailed_humidity.append(current_humidity + ratio * (next_humidity - current_humidity))
+    
+    # Create graph
+    fig, ax1 = plt.subplots(figsize=(12, 7))
+    ax1.set_ylabel('Temperature(°C) and Humidity(%)', fontsize=12)
+    ax1.tick_params(axis='y')
     ax1.grid(True, linestyle='--', alpha=0.7)
     
-    # 습도 그래프 (오른쪽 y축)
-    ax2 = ax1.twinx()
-    ax2.set_ylabel(y2_label, color='blue')
-    ax2.plot(time_points, humidity_points, 'b-', linewidth=2, marker='o', label=humidity_label)
-    ax2.tick_params(axis='y', labelcolor='blue')
+    # Set x-axis range
+    ax1.set_xlim(0, cumulative_display_time[-1])
     
-    # 주요 시간 포인트에 수직선 추가
-    for t in time_points[1:-1]:  # 처음과 마지막 제외
-        ax1.axvline(x=t, color='gray', linestyle='--', alpha=0.5)
+    # Remove x-axis ticks and labels
+    ax1.set_xticks([])  # Remove x-axis ticks
+    ax1.set_xlabel('')  # Remove x-axis label
     
-    # X축 간격 설정
-    ax1.set_xticks(time_points)
-    ax1.set_xticklabels([f"{t}" for t in time_points])
+    # Plot temperature/humidity graphs
+    display_times = [cumulative_display_time[i+1] for i in range(len(temp_points))]
+    ax1.plot(display_times, temp_points, 'ro', markersize=4, label='Temperature(°C) Point')
+    ax1.plot(detailed_times, detailed_temps, 'r-', linewidth=2.5, label='Temperature(°C) Line')
+    ax1.plot(display_times, humidity_points, 'bo', markersize=4, label='Humidity(%) Point')
+    ax1.plot(detailed_times, detailed_humidity, 'b--', linewidth=2.5, label='Humidity(%) Line')
     
-    # 범례 추가
+    # Set y-axis range based on temperature and humidity
+    max_temp = max(temp_points) if temp_points else 0
+    max_humidity = max(humidity_points) if humidity_points else 0
+    
+    # Determine the appropriate y-axis limit
+    if max_temp > 100 or max_humidity > 100:
+        y_max = max(150, max_temp * 1.1, max_humidity * 1.1)  # At least 150 or 110% of the maximum value
+        ax1.set_ylim(0, y_max)
+    else:
+        ax1.set_ylim(0, 100)
+    
+    # Add segment divider lines
+    for i, t in enumerate(cumulative_display_time):
+        if t > 0:  # Don't draw line at start point (0)
+            if i < len(truncated_segments) and truncated_segments[i-1]:
+                # Thicker line after truncated segments
+                ax1.axvline(x=t, color='gray', linestyle='-', linewidth=1.5, alpha=0.7)
+            else:
+                ax1.axvline(x=t, color='gray', linestyle='--', alpha=0.5)
+    
+    # Add arrows under x-axis for each segment
+    arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
+    
+    # Add arrows for each segment
+    for i in range(len(segment_times)):
+        start = cumulative_display_time[i]    # Current segment start
+        end = cumulative_display_time[i+1]    # Current segment end
+        
+        # Draw arrow (all arrows at same y position)
+        y_pos = -0.02  # y position for all arrows
+        ax1.annotate('', 
+                    xy=(start, y_pos), 
+                    xytext=(end, y_pos),
+                    xycoords=('data', 'axes fraction'),
+                    textcoords=('data', 'axes fraction'),
+                    arrowprops=arrow_style)
+        
+        # Display segment time and truncation info
+        if truncated_segments[i]:
+            # For truncated segments, show real time with note
+            time_str = f'{segment_times[i]}h (last 1h only)'  # Keep decimal points
+        else:
+            # For normal segments, show time with decimal points if needed
+            duration = segment_times[i]
+            time_str = f'{duration}h'  # Always show as entered, including decimal points
+        
+        # Display time text under arrow
+        ax1.text((start + end) / 2, y_pos - 0.02,
+                time_str,
+                horizontalalignment='center',
+                verticalalignment='top',
+                transform=ax1.get_xaxis_transform(),
+                fontsize=10)
+    
+    # Add wave patterns for truncated segments
+    for i in range(len(segment_times)):
+        if truncated_segments[i]:
+            x_pos = cumulative_display_time[i]
+            y_range = ax1.get_ylim()
+            y_min, y_max = y_range
+            y_step = (y_max - y_min) / 10
+            
+            # Add multiple wave patterns to create grid-like appearance
+            for j in range(1, 10):
+                y_pos = y_min + j * y_step
+                # Bold wave pattern
+                ax1.text(x_pos + 0.05, y_pos, "//", fontsize=14, color='gray', alpha=0.7)
+                
+            # Add vertical box to indicate wave area
+            rect = plt.Rectangle((x_pos, y_min), 0.15, y_max-y_min, 
+                                fill=True, color='lightgray', alpha=0.1,
+                                linewidth=0, zorder=0)
+            ax1.add_patch(rect)
+    
+    # Adjust margins (to make room for arrows)
+    plt.subplots_adjust(bottom=0.15)
+    
+    # Set graph title
+    plt.title('Temperature-Humidity Profile (Segments over 90h show last 1h only)', fontsize=14)
+    
+    # Add legend
     ax1.legend(loc='upper left')
-    ax2.legend(loc='upper right')
     
-    # 그리드 설정
-    plt.grid(True, linestyle='--', alpha=0.7)
-    
-    # 그래프 제목
-    plt.title(title)
-    
-    # 그래프 여백 조정
     plt.tight_layout()
-    
     return fig
 
-def get_image_download_link(fig, filename="temperature_profile.png", text="그래프 다운로드"):
-    """이미지 다운로드 링크 생성"""
+def get_image_download_link(fig, filename="temperature_profile.png", text="Download Graph"):
     if fig is None:
         return ""
-    
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=300)
     buf.seek(0)
     b64 = base64.b64encode(buf.read()).decode()
-    href = f'<a href="data:image/png;base64,{b64}" download="{filename}">{text}</a>'
-    return href
+    return f'<a href="data:image/png;base64,{b64}" download="{filename}">{text}</a>'
 
 def main():
-    # 앱 시작 시 한글 폰트 설정
-    font_available = setup_local_korean_font()
-    
-    st.title("온습도 프로파일 생성기 - 사용자 정의 포인트")
-    
-    # 사용 방법 설명
-    st.markdown("""
-    ### 사용 방법
-    1. 아래에서 포인트를 추가하세요 (시간, 온도, 습도)
-    2. 여러 포인트를 추가하여 프로파일을 생성하세요
-    3. 필요 없는 포인트를 삭제할 수 있습니다
-    4. 최소 2개 이상의 포인트가 필요합니다
-    """)
-    
-    # 폰트 체크 섹션 (문제 해결용)
-    if st.checkbox("폰트 문제 해결"):
-        st.write("시스템에서 사용 가능한 한글 폰트:")
-        available_fonts = [f.name for f in fm.fontManager.ttflist if any(korean in f.name.lower() for korean in ['hangul', 'korean', 'malgun', 'gothic', 'nanum', 'batang', 'gulim', 'noto'])]
-        st.write(available_fonts)
-        
-        system_info = f"운영체제: {platform.system()}, 버전: {platform.version()}"
-        st.write(system_info)
-        
-        if not available_fonts:
-            st.error("한글 폰트가 발견되지 않았습니다.")
-        else:
-            st.success(f"발견된 한글 폰트: {', '.join(available_fonts)}")
-    
-    # 세션 상태에 데이터프레임 초기화
+    set_matplotlib_font()
+    st.title("Temperature-Humidity Profile Generator - Segment Truncation Version")
+
     if 'profile_df' not in st.session_state:
-        st.session_state.profile_df = pd.DataFrame(columns=['시간(h)', '온도(°C)', '습도(%)'])
-        # 기본 시작점과 끝점 추가
-        st.session_state.profile_df = pd.concat([
-            st.session_state.profile_df,
-            pd.DataFrame([{'시간(h)': 0, '온도(°C)': 25, '습도(%)': 0}])
-        ], ignore_index=True)
-    
-    # 새 포인트 추가 섹션
-    st.subheader("새 포인트 추가")
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-    
+        st.session_state.profile_df = pd.DataFrame(columns=['Segment Time', 'Temperature(°C)', 'Humidity(%)'])
+
+    st.subheader("Add New Segment")
+    col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
-        new_time = st.number_input("시간(h)", value=0.0, min_value=0.0, step=0.5)
+        seg_time = st.text_input("Segment Time", value="1.0", key="seg_time")
     with col2:
-        new_temp = st.number_input("온도(°C)", value=25, min_value=-50, max_value=200)
+        temp = st.text_input("Temperature(°C)", value="25", key="temp")
     with col3:
-        new_humidity = st.number_input("습도(%)", value=0, min_value=0, max_value=100)
-    with col4:
-        if st.button("추가", key="add_point"):
-            # 이미 같은 시간이 있는지 확인
-            if new_time in st.session_state.profile_df['시간(h)'].values:
-                st.warning(f"시간 {new_time}h에 이미 포인트가 존재합니다. 먼저 삭제하거나 다른 시간을 선택하세요.")
+        humid = st.text_input("Humidity(%)", value="0", key="humid")
+
+    if st.button("Add"):
+        try:
+            seg_time_val = float(seg_time)
+            temp_val = float(temp)
+            humid_val = float(humid)
+            if seg_time_val <= 0:
+                st.warning("Segment time must be greater than 0.")
+            elif not (-50 <= temp_val <= 200):
+                st.warning("Temperature must be between -50°C and 200°C.")
+            elif not (0 <= humid_val <= 100):
+                st.warning("Humidity must be between 0% and 100%.")
             else:
-                new_point = pd.DataFrame([{
-                    '시간(h)': new_time,
-                    '온도(°C)': new_temp,
-                    '습도(%)': new_humidity
-                }])
-                st.session_state.profile_df = pd.concat([st.session_state.profile_df, new_point], ignore_index=True)
-                st.session_state.profile_df = st.session_state.profile_df.sort_values('시간(h)').reset_index(drop=True)
-    
-    # 표시할 데이터프레임
-    st.subheader("프로파일 포인트")
-    
-    # 포인트 테이블 표시 및 편집
+                new_row = pd.DataFrame([{'Segment Time': seg_time_val, 'Temperature(°C)': temp_val, 'Humidity(%)': humid_val}])
+                st.session_state.profile_df = pd.concat([st.session_state.profile_df, new_row], ignore_index=True)
+                st.rerun()
+        except ValueError:
+            st.warning("Please enter numeric values.")
+
+    st.subheader("Profile Points (Editable)")
     edited_df = st.data_editor(
-        st.session_state.profile_df, 
-        num_rows="dynamic",
+        st.session_state.profile_df,
         key="profile_editor",
-        column_config={
-            "시간(h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
-            "온도(°C)": st.column_config.NumberColumn(min_value=-50, max_value=200),
-            "습도(%)": st.column_config.NumberColumn(min_value=0, max_value=100)
-        },
-        use_container_width=True
+        use_container_width=True,
+        num_rows="dynamic"
     )
-    
-    # 편집된 데이터프레임 저장
-    st.session_state.profile_df = edited_df.sort_values('시간(h)').reset_index(drop=True)
-    
-    # 미리 정의된 템플릿 버튼
-    st.subheader("미리 정의된 템플릿")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("표준 85°C/85% 테스트 프로파일"):
-            # 기본 85/85 테스트 프로파일
-            st.session_state.profile_df = pd.DataFrame([
-                {'시간(h)': 0.0, '온도(°C)': 25, '습도(%)': 0},
-                {'시간(h)': 0.5, '온도(°C)': 55, '습도(%)': 50},
-                {'시간(h)': 1.0, '온도(°C)': 85, '습도(%)': 85},
-                {'시간(h)': 1001.0, '온도(°C)': 85, '습도(%)': 85},
-                {'시간(h)': 1002.0, '온도(°C)': 25, '습도(%)': 0},
-                {'시간(h)': 1004.0, '온도(°C)': 25, '습도(%)': 0}
-            ])
-    
-    with col2:
-        if st.button("모든 포인트 삭제"):
-            st.session_state.profile_df = pd.DataFrame(columns=['시간(h)', '온도(°C)', '습도(%)'])
-            # 기본 시작점 추가
-            st.session_state.profile_df = pd.concat([
-                st.session_state.profile_df,
-                pd.DataFrame([{'시간(h)': 0, '온도(°C)': 25, '습도(%)': 0}])
-            ], ignore_index=True)
-    
-    # 그래프 표시 언어 선택
-    language_option = st.radio(
-        "그래프 언어 선택:",
-        ("한글", "영어"),
-        horizontal=True
-    )
-    
-    # 그래프 생성
+
+    # Check for data changes and update
+    if not edited_df.equals(st.session_state.profile_df):
+        st.session_state.profile_df = edited_df
+        st.rerun()
+        
+    # Check for segments over 90 hours
+    if not st.session_state.profile_df.empty:
+        long_segments = st.session_state.profile_df[st.session_state.profile_df['Segment Time'] >= 90]
+        if not long_segments.empty:
+            st.info(f"{len(long_segments)} segment(s) over 90 hours will display only the last 1 hour.")
+
+    # Auto-generate graph
     if len(st.session_state.profile_df) >= 2:
-        if language_option == "영어":
-            # 영어로 그래프 생성
-            fig = create_custom_profile_graph(st.session_state.profile_df, use_korean=False)
+        df_with_segment = st.session_state.profile_df.copy()
+        df_with_segment.insert(0, 'Segment Number', range(1, len(df_with_segment) + 1))
+        df_with_segment['Segment Time'] = pd.to_numeric(df_with_segment['Segment Time'], errors='coerce')
+        df_with_segment['Temperature(°C)'] = pd.to_numeric(df_with_segment['Temperature(°C)'], errors='coerce')
+        df_with_segment['Humidity(%)'] = pd.to_numeric(df_with_segment['Humidity(%)'], errors='coerce')
+
+        if df_with_segment[['Segment Time', 'Temperature(°C)', 'Humidity(%)']].isnull().any().any():
+            st.warning("Non-numeric values detected. Please correct before generating the graph.")
         else:
-            # 한글로 그래프 생성
-            fig = create_custom_profile_graph(st.session_state.profile_df, use_korean=True)
-            
-        if fig:
-            st.pyplot(fig)
-            # 다운로드 링크 생성
-            st.markdown(get_image_download_link(fig), unsafe_allow_html=True)
+            fig = create_stepped_profile_graph(df_with_segment)
+            if fig:
+                st.pyplot(fig)
+                st.markdown(get_image_download_link(fig), unsafe_allow_html=True)
     else:
-        st.warning("그래프를 생성하려면 최소 2개의 포인트가 필요합니다.")
+        st.warning("At least 2 points are required to generate a graph.")
 
 if __name__ == "__main__":
     main()
