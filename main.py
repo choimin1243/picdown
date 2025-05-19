@@ -249,11 +249,11 @@ def create_stepped_profile_graph(df):
         humid_detailed = ax2.plot([], [], 'b--', linewidth=2.5, 
                                     dashes=[1.5, 1.5], label='Humidity(%) RH Line')[0]
     
-    # 수정된 부분: 모든 세그먼트 구분선을 점선으로 표시 (더 촘촘하게)
+    # 수정된 부분: 모든 세그먼트 구분선을 실선으로 표시
     for i, t in enumerate(cumulative_display_time):
         if t > 0:  # Don't draw line at start point (0)
-            # 모든 구간의 끝 경계선을 더 촘촘한 점선으로 통일
-            ax1.axvline(x=t, color='gray', linestyle=(0, (1, 1)), alpha=0.5)
+            # 모든 구간의 끝 경계선을 실선으로 통일
+            ax1.axvline(x=t, color='black', linestyle='-', alpha=0.5)
     
     # Add arrows under x-axis for each segment
     arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
