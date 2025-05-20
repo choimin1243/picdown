@@ -249,11 +249,11 @@ def create_stepped_profile_graph(df):
         humid_detailed = ax2.plot([], [], 'b--', linewidth=2.5, 
                                     dashes=[1.5, 1.5], label='Humidity(%) RH Line')[0]
     
-    # 수정된 부분: 모든 세그먼트 구분선을 실선으로 표시
+    # 각 구간 경계(0 제외)에 x축에 붙은 회색 수직 바 추가
     for i, t in enumerate(cumulative_display_time):
         if t > 0:  # Don't draw line at start point (0)
-            # 모든 구간의 끝 경계선을 실선으로 통일
-            ax1.axvline(x=t, color='black', linestyle='-', alpha=0.5)
+            ax1.axvline(x=t, color='black', linestyle='--', alpha=0.5, ymin=-0.1, ymax=1.0)
+            ax1.plot([t, t], [0, -0.04], color='gray', linewidth=2, transform=ax1.get_xaxis_transform(), clip_on=False)
     
     # Add arrows under x-axis for each segment
     arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
@@ -263,8 +263,11 @@ def create_stepped_profile_graph(df):
         start = cumulative_display_time[i]    # Current segment start
         end = cumulative_display_time[i+1]    # Current segment end
         
-        # Draw arrow (all arrows at same y position)
+        # Draw vertical line before arrow
         y_pos = -0.02  # y position for all arrows
+        ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
+        
+        # Draw arrow (all arrows at same y position)
         ax1.annotate('', 
                     xy=(start, y_pos), 
                     xytext=(end, y_pos),
@@ -341,7 +344,11 @@ def main():
                 st.warning("Humidity must be between 0% and 100%.")
             else:
                 new_row = pd.DataFrame([{'Segment Time': seg_time_val, 'Temperature(°C)': temp_val, 'Humidity(%)': humid_val}])
-                st.session_state.profile_df = pd.concat([st.session_state.profile_df, new_row], ignore_index=True)
+                # 빈 DataFrame인 경우 직접 할당, 아닌 경우 concat 사용
+                if st.session_state.profile_df.empty:
+                    st.session_state.profile_df = new_row
+                else:
+                    st.session_state.profile_df = pd.concat([st.session_state.profile_df, new_row], ignore_index=True, copy=False)
                 st.rerun()
         except ValueError:
             st.warning("Please enter numeric values.")
