@@ -320,7 +320,9 @@ def main():
     st.title("Temperature-Humidity Profile Generator - Segment Truncation Version")
 
     if 'profile_df' not in st.session_state:
-        st.session_state.profile_df = pd.DataFrame(columns=['Segment Time', 'Temperature(°C)', 'Humidity(%)'])
+        st.session_state.profile_df = pd.DataFrame(
+            [{'No.': '', 'Segment Time': '', 'Temperature(°C)': '', 'Humidity(%)': ''}]
+        )
 
     st.subheader("Add New Segment")
     col1, col2, col3 = st.columns([2, 2, 2])
@@ -343,7 +345,7 @@ def main():
             elif not (0 <= humid_val <= 100):
                 st.warning("Humidity must be between 0% and 100%.")
             else:
-                new_row = pd.DataFrame([{'Segment Time': seg_time_val, 'Temperature(°C)': temp_val, 'Humidity(%)': humid_val}])
+                new_row = pd.DataFrame([{'No.': len(st.session_state.profile_df) + 1, 'Segment Time': seg_time_val, 'Temperature(°C)': temp_val, 'Humidity(%)': humid_val}])
                 # 빈 DataFrame인 경우 직접 할당, 아닌 경우 concat 사용
                 if st.session_state.profile_df.empty:
                     st.session_state.profile_df = new_row
@@ -355,15 +357,10 @@ def main():
 
     st.subheader("Profile Points (Editable)")
     
-    # 데이터 준비 - 자동으로 순번 컬럼 추가
-    if not st.session_state.profile_df.empty:
-        display_df = st.session_state.profile_df.copy()
-        # 번호 열 추가 (1부터 시작하는 자동 번호)
-        display_df.insert(0, 'No.', range(1, len(display_df) + 1))
-    else:
-        display_df = st.session_state.profile_df.copy()
-        display_df['No.'] = []
-    
+    # 항상 컬럼 순서 맞추기
+    display_df = st.session_state.profile_df.copy()
+    display_df = display_df.reindex(columns=['No.', 'Segment Time', 'Temperature(°C)', 'Humidity(%)'])
+
     # 편집 가능한 데이터 에디터 표시
     edited_df = st.data_editor(
         display_df,
@@ -373,36 +370,49 @@ def main():
         column_config={
             "No.": st.column_config.NumberColumn(
                 "No.",
-                help="자동 순번",
-                disabled=True,  # 편집 불가능하게 설정
+                help="자동 순번 (비거나 잘못되면 자동으로 채워집니다)",
                 format="%d",
             )
         },
-        hide_index=True,  # 기본 인덱스 숨기기
+        hide_index=True,
     )
-    
-    # 편집된 데이터 처리 ('No.' 컬럼 제거 후 session_state에 저장)
+
+    # 편집된 데이터 처리
     if not edited_df.equals(display_df):
-        # 'No.' 열 제거 후 저장
-        edited_df_without_no = edited_df.drop(columns=['No.'])
-        
-        # 마지막 행의 Segment Time이 None인지 확인하고 처리
-        if len(edited_df_without_no) > 0:
-            last_row_segment_time = edited_df_without_no.iloc[-1]['Segment Time']
-            
-            if pd.isna(last_row_segment_time) or last_row_segment_time is None:
-                # 마지막 행 삭제
-                edited_df_without_no = edited_df_without_no.iloc[:-1]
+        # 마지막 행의 Segment Time이 None, NaN, '' 인지 확인하고 처리
+        if len(edited_df) > 0:
+            last_row_segment_time = edited_df.iloc[-1]['Segment Time']
+            if pd.isna(last_row_segment_time) or last_row_segment_time is None or last_row_segment_time == '':
+                edited_df = edited_df.iloc[:-1]
                 st.info("Last row with empty Segment Time has been removed.")
-        
-        # 업데이트된 df와 원래 df 비교
-        if not edited_df_without_no.equals(st.session_state.profile_df):
-            st.session_state.profile_df = edited_df_without_no
-            st.rerun()
-        
+
+        # No 컬럼이 int로 변환 불가한 값이 있으면 NaN으로 처리
+        no_col = pd.to_numeric(edited_df['No.'], errors='coerce')
+        # No 컬럼이 NaN이거나, 오름차순이 아니면 자동으로 재정렬
+        if (
+            'No.' not in edited_df.columns
+            or no_col.isnull().any()
+            or not np.array_equal(
+                no_col.dropna().sort_values().values,
+                np.arange(1, len(no_col.dropna()) + 1)
+            )
+        ):
+            edited_df['No.'] = range(1, len(edited_df) + 1)
+
+        # 컬럼 순서 맞추기
+        edited_df = edited_df.reindex(columns=['No.', 'Segment Time', 'Temperature(°C)', 'Humidity(%)'])
+
+        st.session_state.profile_df = edited_df
+        st.rerun()
+
     # Check for segments over 90 hours
     if not st.session_state.profile_df.empty:
-        long_segments = st.session_state.profile_df[st.session_state.profile_df['Segment Time'] >= 90]
+        # 'Segment Time'을 숫자로 변환 (에러시 NaN)
+        profile_df_numeric = st.session_state.profile_df.copy()
+        profile_df_numeric['Segment Time'] = pd.to_numeric(profile_df_numeric['Segment Time'], errors='coerce')
+
+        # 90 이상인 행만 추출 (NaN은 자동으로 False 처리)
+        long_segments = profile_df_numeric[profile_df_numeric['Segment Time'] >= 90]
         if not long_segments.empty:
             st.info(f"{len(long_segments)} segment(s) over 90 hours will display only the last 1 hour.")
         
