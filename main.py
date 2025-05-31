@@ -213,10 +213,13 @@ def create_stepped_profile_graph(df):
         y_pos = -0.02
         ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
         ax1.annotate('', xy=(start, y_pos), xytext=(end, y_pos), xycoords=('data', 'axes fraction'), textcoords=('data', 'axes fraction'), arrowprops=arrow_style)
-        actual_duration = int(segment_times[i])
+        actual_duration = segment_times[i]
         # 0인 구간은 텍스트 표시하지 않음
         if actual_duration != 0:
-            time_str = f'{actual_duration}'
+            if actual_duration < 1:
+                time_str = f'{actual_duration:.1f}'
+            else:
+                time_str = f'{int(actual_duration)}'
             ax1.text((start + end) / 2, y_pos - 0.02, time_str, horizontalalignment='center', verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Update graph title to reflect compression
