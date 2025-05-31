@@ -34,12 +34,12 @@ def create_stepped_profile_graph(df):
     cumulative_display_time = [0]  # Start at 0
     current_time = 0
     
-    # Calculate actual display time for each segment
+    # Calculate display time for each segment (1000+ hours compressed to 96 hours)
     for i, time in enumerate(segment_times):
-        if truncated_segments[i]:  # 1000+ hour segment
-            current_time += time / 3  # Show 1/3 of the time
-        else:  # Less than 1000 hour segment
-            current_time += time  # Show full time
+        if time >= 1000:
+            current_time += 80  # Always show as 96 hours for segments >= 1000h
+        else:
+            current_time += time  # Show actual time
         cumulative_display_time.append(current_time)
     
     # Temperature and humidity points
@@ -64,44 +64,24 @@ def create_stepped_profile_graph(df):
     first_temp = temp_points[0]
     first_humidity = humidity_points[0]
     
-    # Process first segment differently based on its length
-    if truncated_segments[0]:
-        # 1000+ hours - include 1/3 of the segment
-        segment_start = cumulative_display_time[0]  # 0
-        segment_end = cumulative_display_time[1]    # time/3
-        real_start = 0                              # Start from 0
-        real_end = segment_times[0]                 # Total time
-        
-        # Generate detailed data for the 1/3 segment
-        for t in np.linspace(segment_start, segment_end, 20):
-            # Convert t to real time (0 to time/3 range -> 0 to total time range)
-            real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
-            real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
-            
-            detailed_times.append(t)  # Display time
-            detailed_temps.append(first_temp)  # First segment has constant value
-    else:
-        # Less than 1000 hours - include the whole segment
-        segment_start = cumulative_display_time[0]
-        segment_end = cumulative_display_time[1]
-        
-        for t in np.linspace(segment_start, segment_end, 20):
-            detailed_times.append(t)
-            detailed_temps.append(first_temp)
+    # Process first segment
+    segment_start = cumulative_display_time[0]
+    segment_end = cumulative_display_time[1]
+    
+    for t in np.linspace(segment_start, segment_end, 20):
+        detailed_times.append(t)
+        detailed_temps.append(first_temp)
     
     # 첫 번째 구간 습도 데이터 생성
-    current_times = []
-    current_humidity_data = []
+    current_times = [display_times[0]]
+    current_humidity_data = [humidity_points[0]]
     
     if not humidity_zeros[0]:  # 첫 구간이 0이 아니면
         segment_start = cumulative_display_time[0]
         segment_end = cumulative_display_time[1]
-        # 더 많은 포인트를 생성하여 점선이 더 균일하게 표시되도록 함
         for t in np.linspace(segment_start, segment_end, 50):
             current_times.append(t)
             current_humidity_data.append(first_humidity)
-        
-        # 구간 데이터 저장
         time_segments.append(current_times)
         humidity_segments.append(current_humidity_data)
     
@@ -116,40 +96,27 @@ def create_stepped_profile_graph(df):
         segment_start = cumulative_display_time[i]
         segment_end = cumulative_display_time[i+1]
         
-        if truncated_segments[i]:
-            # 1000+ hour segment - map real time to display time
-            real_start = 0                     # Start from 0
-            real_end = segment_times[i]        # Total time
+        # Generate temperature data for this segment
+        for t in np.linspace(segment_start, segment_end, 20):
+            # Calculate ratio for temperature interpolation
+            ratio = (t - segment_start) / (segment_end - segment_start) if segment_end > segment_start else 0
             
-            for t in np.linspace(segment_start, segment_end, 20)[1:]:
-                # Convert t to real time
-                real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
-                real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
-                
-                detailed_times.append(t)  # Display time
-                detailed_temps.append(current_temp + real_ratio * (next_temp - current_temp))
-        else:
-            # Less than 1000 hour segment - normal processing
-            for t in np.linspace(segment_start, segment_end, 20)[1:]:
-                ratio = (t - segment_start) / (segment_end - segment_start) if segment_end > segment_start else 0
-                
-                detailed_times.append(t)  # Display time
-                detailed_temps.append(current_temp + ratio * (next_temp - current_temp))
+            detailed_times.append(t)
+            detailed_temps.append(current_temp + ratio * (next_temp - current_temp))
         
         # 현재 구간의 습도 처리
-        current_times = []
-        current_humidity_data = []
+        current_times = [display_times[i]]
+        current_humidity_data = [humidity_points[i]]
         
         # 이전 구간과 현재 구간 모두 0이 아닌 경우 (값->값)
         if not humidity_zeros[i-1] and not humidity_zeros[i]:
-            # 더 많은 포인트를 생성하여 점선이 더 균일하게 표시되도록 함
-            for t in np.linspace(segment_start, segment_end, 50)[1:]:
+            for t in np.linspace(segment_start, segment_end, 50):
                 ratio = (t - segment_start) / (segment_end - segment_start) if segment_end > segment_start else 0
                 h_value = current_humidity + ratio * (next_humidity - current_humidity)
                 current_times.append(t)
                 current_humidity_data.append(h_value)
             
-            # 마지막 구간인 경우 새 세그먼트 추가
+            # 구간 데이터 저장
             if len(current_times) > 0:
                 time_segments.append(current_times)
                 humidity_segments.append(current_humidity_data)
@@ -157,7 +124,6 @@ def create_stepped_profile_graph(df):
         # 이전 구간이 0, 현재 구간이 0이 아닌 경우 (0->값)
         elif humidity_zeros[i-1] and not humidity_zeros[i]:
             # 새 세그먼트 시작 (현재 구간 시작점부터 끝까지 다음 습도값으로 고정)
-            # 더 많은 포인트를 생성하여 점선이 더 균일하게 표시되도록 함
             for t in np.linspace(segment_start, segment_end, 50):
                 current_times.append(t)
                 current_humidity_data.append(next_humidity)
@@ -173,8 +139,8 @@ def create_stepped_profile_graph(df):
         # 이전 구간도 0이고 현재 구간도 0인 경우 (0->0)
         # 아무것도 추가하지 않음
     
-    # Create graph
-    fig, ax1 = plt.subplots(figsize=(12, 7))
+    # Create graph with adjusted figure size to accommodate legend
+    fig, ax1 = plt.subplots(figsize=(14, 7))  # Increased width for legend space
     
     # Set up the first axis for Temperature
     ax1.set_ylabel('Temperature(°C)', color='red', fontsize=12)
@@ -183,7 +149,7 @@ def create_stepped_profile_graph(df):
     
     # Set up the second axis for Humidity
     ax2 = ax1.twinx()
-    ax2.set_ylabel('Humidity(%) RH', color='blue', fontsize=12)
+    ax2.set_ylabel('Humidity(% RH)', color='blue', fontsize=12)
     ax2.tick_params(axis='y', labelcolor='blue')
     
     # Set x-axis range
@@ -192,6 +158,10 @@ def create_stepped_profile_graph(df):
     # Remove x-axis ticks and labels
     ax1.set_xticks([])  # Remove x-axis ticks
     ax1.set_xlabel('')  # Remove x-axis label
+    
+    # Add (h) label at the right end of x-axis
+    ax1.text(cumulative_display_time[-1], -0.06, '(h)', horizontalalignment='right', 
+             verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Y축 범위 조정 - 온도
     min_temp = min(min(temp_points) if temp_points else 0, 0)
@@ -214,7 +184,7 @@ def create_stepped_profile_graph(df):
     
     # Plot temperature on ax1
     temp_line = ax1.plot(display_times, temp_points, 'ro', markersize=4, label='Temperature(°C) Point')[0]
-    temp_detailed = ax1.plot(detailed_times, detailed_temps, 'r-', linewidth=2.5, label='Temperature(°C) Line')[0]
+    temp_detailed = ax1.plot(detailed_times, detailed_temps, color='tomato', linewidth=1.0, label='Temperature(°C) Line')[0]
     
     # Plot humidity on ax2 (0이 아닌 값만 표시)
     # 포인트 마커는 0이 아닌 습도 값만 표시
@@ -237,80 +207,60 @@ def create_stepped_profile_graph(df):
         # 각 세그먼트마다 별도의 선으로 그림
         for i, (times, humidity_data) in enumerate(zip(time_segments, humidity_segments)):
             if i == 0:
-                # 점선 패턴 변경 - 더 촘촘하게 (1.5, 1.5)는 1.5픽셀 실선, 1.5픽셀 공백
+                # 점선 패턴을 더 촘촘하게 변경 (1, 1)는 1픽셀 실선, 1픽셀 공백
                 # 첫 번째 세그먼트에만 레이블 추가
-                humid_detailed = ax2.plot(times, humidity_data, 'b--', linewidth=2.5, 
-                                           dashes=[1.5, 1.5], label='Humidity(%) RH Line')[0]
+                humid_detailed = ax2.plot(times, humidity_data, 'b--', linewidth=1.5, 
+                                           dashes=[1, 1], label='Humidity(%) RH Line')[0]
             else:
                 # 나머지 세그먼트는 레이블 없이 그림
-                ax2.plot(times, humidity_data, 'b--', linewidth=2.5, dashes=[1.5, 1.5])
+                ax2.plot(times, humidity_data, 'b--', linewidth=1.5, dashes=[1, 1])
     else:
         # 습도 선이 없는 경우 더미 라인 생성 (레전드용)
-        humid_detailed = ax2.plot([], [], 'b--', linewidth=2.5, 
-                                    dashes=[1.5, 1.5], label='Humidity(%) RH Line')[0]
+        humid_detailed = ax2.plot([], [], 'b--', linewidth=1.5, 
+                                    dashes=[1, 1], label='Humidity(%) RH Line')[0]
     
     # 각 구간 경계(0 제외)에 x축에 붙은 회색 수직 바 추가
     for i, t in enumerate(cumulative_display_time):
-        if t > 0:  # Don't draw line at start point (0)
-            ax1.axvline(x=t, color='black', linestyle='--', alpha=0.5, ymin=-0.1, ymax=1.0)
+        if t > 0:
+            # 더 촘촘한 점선 패턴으로 변경: (1, 1)
+            ax1.axvline(x=t, color='black', linestyle=(0, (1, 1)), alpha=0.6, ymin=-0.1, ymax=1.0)
             ax1.plot([t, t], [0, -0.04], color='gray', linewidth=2, transform=ax1.get_xaxis_transform(), clip_on=False)
     
     # Add arrows under x-axis for each segment
     arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
     
-    # Add arrows for each segment
+    # Add arrows for each segment with actual time labels
     for i in range(len(segment_times)):
-        start = cumulative_display_time[i]    # Current segment start
-        end = cumulative_display_time[i+1]    # Current segment end
-        
-        # Draw vertical line before arrow
-        y_pos = -0.02  # y position for all arrows
+        start = cumulative_display_time[i]
+        end = cumulative_display_time[i+1]
+        y_pos = -0.02
         ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
-        
-        # Draw arrow (all arrows at same y position)
-        ax1.annotate('', 
-                    xy=(start, y_pos), 
-                    xytext=(end, y_pos),
-                    xycoords=('data', 'axes fraction'),
-                    textcoords=('data', 'axes fraction'),
-                    arrowprops=arrow_style)
-        
-        # Display segment time and truncation info
-        if truncated_segments[i]:
-            # For truncated segments, show real time with note
-            time_str = f'{segment_times[i]}h (1/3 scale)'  # Keep decimal points
-        else:
-            # For normal segments, show time with decimal points if needed
-            duration = segment_times[i]
-            time_str = f'{duration}h'  # Always show as entered, including decimal points
-        
-        # Display time text under arrow
-        ax1.text((start + end) / 2, y_pos - 0.02,
-                time_str,
-                horizontalalignment='center',
-                verticalalignment='top',
-                transform=ax1.get_xaxis_transform(),
-                fontsize=10)
+        ax1.annotate('', xy=(start, y_pos), xytext=(end, y_pos), xycoords=('data', 'axes fraction'), textcoords=('data', 'axes fraction'), arrowprops=arrow_style)
+        actual_duration = int(segment_times[i])
+        # 0인 구간은 텍스트 표시하지 않음
+        if actual_duration != 0:
+            time_str = f'{actual_duration}'
+            ax1.text((start + end) / 2, y_pos - 0.02, time_str, horizontalalignment='center', verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
-    # Adjust margins (to make room for arrows)
-    plt.subplots_adjust(bottom=0.15)
+    # Update graph title to reflect compression
+    plt.title('Temperature-Humidity Profile', fontsize=14)
     
-    # Set graph title
-    plt.title('Temperature-Humidity Profile (Segments over 1000h show 1/3 scale)', fontsize=14)
-    
-    # Combine legends from both axes
-    lines = [temp_line, temp_detailed, humid_line, humid_detailed]
+    # Combine legends from both axes and place outside the plot area on the upper right
+    lines = [temp_detailed, humid_detailed]
     labels = [l.get_label() for l in lines]
-    ax1.legend(lines, labels, loc='upper left')
+    ax1.legend(lines, labels, loc='upper left', bbox_to_anchor=(1.05, 1.0))
     
+    # Adjust layout to prevent legend from being cut off
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15, right=0.85)  # Make room for legend and arrows
+    
     return fig
 
 def get_image_download_link(fig, filename="temperature_profile.png", text="Download Graph"):
     if fig is None:
         return ""
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=300)
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')  # Added bbox_inches='tight'
     buf.seek(0)
     b64 = base64.b64encode(buf.read()).decode()
     return f'<a href="data:image/png;base64,{b64}" download="{filename}">{text}</a>'
@@ -445,16 +395,16 @@ def main():
             st.session_state.selected_rows = set()
             st.rerun()
 
-    # Check for segments over 90 hours
+    # Check for segments over 1000 hours
     if not st.session_state.profile_df.empty:
         # 'Segment Time'을 숫자로 변환 (에러시 NaN)
         profile_df_numeric = st.session_state.profile_df.copy()
         profile_df_numeric['Segment Time'] = pd.to_numeric(profile_df_numeric['Segment Time'], errors='coerce')
-
-        # 1000 이상인 행만 추출 (NaN은 자동으로 False 처리)
+        
+        # Check for segments >= 1000 hours
         long_segments = profile_df_numeric[profile_df_numeric['Segment Time'] >= 1000]
         if not long_segments.empty:
-            st.info(f"{len(long_segments)} segment(s) over 1000 hours will display with 1/3 scale.")
+            st.info(f"{len(long_segments)} segment(s) are ≥1000 hours and will be displayed as 96 hours.")
         
         # Also check for zero humidity segments
         zero_humidity_segments = st.session_state.profile_df[st.session_state.profile_df['Humidity(%)'] == 0]
