@@ -124,11 +124,11 @@ def create_stepped_profile_graph(df):
         # 이전 구간이 0, 현재 구간이 0이 아닌 경우 (0->값)
         elif humidity_zeros[i-1] and not humidity_zeros[i]:
             # 새 세그먼트 시작 (현재 구간 시작점부터 끝까지 다음 습도값으로 고정)
+            current_times = [display_times[i]]
+            current_humidity_data = [next_humidity]
             for t in np.linspace(segment_start, segment_end, 50):
                 current_times.append(t)
                 current_humidity_data.append(next_humidity)
-                
-            # 새 세그먼트 추가
             if len(current_times) > 0:
                 time_segments.append(current_times)
                 humidity_segments.append(current_humidity_data)
@@ -179,41 +179,23 @@ def create_stepped_profile_graph(df):
     ax2.set_ylim(0, 100)
     
     # Plot temperature on ax1
-    temp_line = ax1.plot(display_times, temp_points, 'ro', markersize=4, label='Temperature(°C) Point')[0]
+    # temp_line = ax1.plot(display_times, temp_points, 'ro', markersize=4, label='Temperature(°C) Point')[0]  # 포인트 표시 제거
     temp_detailed = ax1.plot(detailed_times, detailed_temps, color='tomato', linewidth=1.0, label='Temperature(°C) Line')[0]
     
     # Plot humidity on ax2 (0이 아닌 값만 표시)
     # 포인트 마커는 0이 아닌 습도 값만 표시
-    non_zero_humidity_points = []
-    non_zero_display_times = []
-    for i, h in enumerate(humidity_points):
-        if h != 0:
-            non_zero_humidity_points.append(h)
-            non_zero_display_times.append(display_times[i])
-    
-    # 습도 포인트 그리기 (0이 아닌 값만)
-    if len(non_zero_humidity_points) > 0:
-        humid_line = ax2.plot(non_zero_display_times, non_zero_humidity_points, 'bo', markersize=4, label='Humidity(%) RH Point')[0]
-    else:
-        # 습도 포인트가 없는 경우 더미 라인 생성 (레전드용)
-        humid_line = ax2.plot([], [], 'bo', markersize=4, label='Humidity(%) RH Point')[0]
+    # 포인트 마커 표시 제거
     
     # 습도 선 그리기 (각 세그먼트별로)
     if len(humidity_segments) > 0:
         # 각 세그먼트마다 별도의 선으로 그림
         for i, (times, humidity_data) in enumerate(zip(time_segments, humidity_segments)):
             if i == 0:
-                # 점선 패턴을 더 촘촘하게 변경 (1, 1)는 1픽셀 실선, 1픽셀 공백
-                # 첫 번째 세그먼트에만 레이블 추가
-                humid_detailed = ax2.plot(times, humidity_data, 'b--', linewidth=1.5, 
-                                           dashes=[1, 1], label='Humidity(% RH Line)')[0]
+                humid_detailed = ax2.plot(times, humidity_data, color='blue', linestyle='-', linewidth=0.5, label='Humidity(% RH Line)')[0]
             else:
-                # 나머지 세그먼트는 레이블 없이 그림
-                ax2.plot(times, humidity_data, 'b--', linewidth=1.5, dashes=[1, 1])
+                ax2.plot(times, humidity_data, color='blue', linestyle='-', linewidth=0.5)
     else:
-        # 습도 선이 없는 경우 더미 라인 생성 (레전드용)
-        humid_detailed = ax2.plot([], [], 'b--', linewidth=1.5, 
-                                    dashes=[1, 1], label='Humidity(%) RH Line')[0]
+        humid_detailed = ax2.plot([], [], color='blue', linestyle='-', linewidth=0.5, label='Humidity(% RH Line)')[0]
     
     # 각 구간 경계(0 포함)에 x축에 붙은 회색 수직 바 추가
     for i, t in enumerate(cumulative_display_time):
