@@ -26,9 +26,10 @@ def create_stepped_profile_graph(df):
 
     set_matplotlib_font()
 
-    # Check segments to truncate (segments with 90+ hours)
+    # Check segments to truncate (segments with 96+ hours or 1000+ hours)
     segment_times = df['Segment Time'].tolist()
-    truncated_segments = [time >= 90 for time in segment_times]
+    truncated_segments = [time >= 96 for time in segment_times]
+    very_long_segments = [time >= 1000 for time in segment_times]
     
     # Calculate cumulative display time
     cumulative_display_time = [0]  # Start at 0
@@ -36,9 +37,11 @@ def create_stepped_profile_graph(df):
     
     # Calculate actual display time for each segment
     for i, time in enumerate(segment_times):
-        if truncated_segments[i]:  # 90+ hour segment
-            current_time += 1  # Show only the last 1 hour
-        else:  # Less than 90 hour segment
+        if very_long_segments[i]:  # 1000+ hour segment
+            current_time += time / 30  # Show 1/30 of the original time
+        elif truncated_segments[i]:  # 96+ hour segment
+            current_time += 96  # Show exactly 96 hours
+        else:  # Less than 96 hour segment
             current_time += time  # Show full time
         cumulative_display_time.append(current_time)
     
@@ -65,23 +68,38 @@ def create_stepped_profile_graph(df):
     first_humidity = humidity_points[0]
     
     # Process first segment differently based on its length
-    if truncated_segments[0]:
-        # 90+ hours - include only the last hour
+    if very_long_segments[0]:
+        # 1000+ hours - include 1/30 of the time
         segment_start = cumulative_display_time[0]  # 0
-        segment_end = cumulative_display_time[1]    # 1
-        real_start = segment_times[0] - 1           # Total time - 1
+        segment_end = cumulative_display_time[1]    # original_time/30
+        real_start = 0                              # Start from beginning
         real_end = segment_times[0]                 # Total time
         
-        # Generate detailed data for the last hour
+        # Generate detailed data for the truncated time
         for t in np.linspace(segment_start, segment_end, 20):
-            # Convert t to real time (0-1 range -> (total time-1)-total time range)
+            # Convert t to real time (0-segment_end range -> 0-total_time range)
+            real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
+            real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
+            
+            detailed_times.append(t)  # Display time
+            detailed_temps.append(first_temp)  # First segment has constant value
+    elif truncated_segments[0]:
+        # 96+ hours - include exactly 96 hours
+        segment_start = cumulative_display_time[0]  # 0
+        segment_end = cumulative_display_time[1]    # 96
+        real_start = 0                              # Start from beginning
+        real_end = 96                               # Show exactly 96 hours
+        
+        # Generate detailed data for 96 hours
+        for t in np.linspace(segment_start, segment_end, 20):
+            # Convert t to real time (0-96 range -> 0-96 range)
             real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
             real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
             
             detailed_times.append(t)  # Display time
             detailed_temps.append(first_temp)  # First segment has constant value
     else:
-        # Less than 90 hours - include the whole segment
+        # Less than 96 hours - include the whole segment
         segment_start = cumulative_display_time[0]
         segment_end = cumulative_display_time[1]
         
@@ -116,10 +134,22 @@ def create_stepped_profile_graph(df):
         segment_start = cumulative_display_time[i]
         segment_end = cumulative_display_time[i+1]
         
-        if truncated_segments[i]:
-            # 90+ hour segment - map real time to display time
-            real_start = segment_times[i] - 1  # Total time - 1
-            real_end = segment_times[i]        # Total time
+        if very_long_segments[i]:
+            # 1000+ hour segment - show 1/30 of the time
+            real_start = 0               # Start from beginning
+            real_end = segment_times[i]  # Total time
+            
+            for t in np.linspace(segment_start, segment_end, 20)[1:]:
+                # Convert t to real time
+                real_t = real_start + (t - segment_start) * (real_end - real_start) / (segment_end - segment_start)
+                real_ratio = (real_t - real_start) / (real_end - real_start) if real_end > real_start else 0
+                
+                detailed_times.append(t)  # Display time
+                detailed_temps.append(current_temp + real_ratio * (next_temp - current_temp))
+        elif truncated_segments[i]:
+            # 96+ hour segment - show exactly 96 hours
+            real_start = 0               # Start from beginning
+            real_end = 96                # Show exactly 96 hours
             
             for t in np.linspace(segment_start, segment_end, 20)[1:]:
                 # Convert t to real time
@@ -129,7 +159,7 @@ def create_stepped_profile_graph(df):
                 detailed_times.append(t)  # Display time
                 detailed_temps.append(current_temp + real_ratio * (next_temp - current_temp))
         else:
-            # Less than 90 hour segment - normal processing
+            # Less than 96 hour segment - normal processing
             for t in np.linspace(segment_start, segment_end, 20)[1:]:
                 ratio = (t - segment_start) / (segment_end - segment_start) if segment_end > segment_start else 0
                 
@@ -166,12 +196,6 @@ def create_stepped_profile_graph(df):
             if len(current_times) > 0:
                 time_segments.append(current_times)
                 humidity_segments.append(current_humidity_data)
-        
-        # 이전 구간이 0이 아니고 현재 구간이 0인 경우 (값->0)
-        # 이 경우 이전 습도 세그먼트에서 이미 처리됨, 여기서는 아무것도 안함
-        
-        # 이전 구간도 0이고 현재 구간도 0인 경우 (0->0)
-        # 아무것도 추가하지 않음
     
     # Create graph
     fig, ax1 = plt.subplots(figsize=(12, 7))
@@ -276,13 +300,17 @@ def create_stepped_profile_graph(df):
                     arrowprops=arrow_style)
         
         # Display segment time and truncation info
-        if truncated_segments[i]:
-            # For truncated segments, show real time with note
-            time_str = f'{segment_times[i]}h (last 1h only)'  # Keep decimal points
+        if very_long_segments[i]:
+            # For very long segments (1000+ hours), show 1/30 ratio
+            display_time = segment_times[i] / 30
+            time_str = f'{segment_times[i]}h (1:30 scale)'
+        elif truncated_segments[i]:
+            # For truncated segments (96+ hours), show exactly 96 hours
+            time_str = f'{segment_times[i]}h (96h)'
         else:
             # For normal segments, show time with decimal points if needed
             duration = segment_times[i]
-            time_str = f'{duration}h'  # Always show as entered, including decimal points
+            time_str = f'{duration}h'
         
         # Display time text under arrow
         ax1.text((start + end) / 2, y_pos - 0.02,
@@ -296,7 +324,7 @@ def create_stepped_profile_graph(df):
     plt.subplots_adjust(bottom=0.15)
     
     # Set graph title
-    plt.title('Temperature-Humidity Profile (Segments over 90h show last 1h only)', fontsize=14)
+    plt.title('Temperature-Humidity Profile (Segments over 96h show 96h, over 1000h show 1:30 scale)', fontsize=14)
     
     # Combine legends from both axes
     lines = [temp_line, temp_detailed, humid_line, humid_detailed]
@@ -321,7 +349,7 @@ def main():
 
     if 'profile_df' not in st.session_state:
         st.session_state.profile_df = pd.DataFrame(
-            [{'No.': '', 'Segment Time': '', 'Temperature(°C)': '', 'Humidity(%)': ''}]
+            columns=['No.', 'Segment Time', 'Temperature(°C)', 'Humidity(%)']
         )
 
     st.subheader("Add New Segment")
@@ -405,16 +433,21 @@ def main():
         st.session_state.profile_df = edited_df
         st.rerun()
 
-    # Check for segments over 90 hours
+    # Check for segments over 96 hours and 1000 hours
     if not st.session_state.profile_df.empty:
         # 'Segment Time'을 숫자로 변환 (에러시 NaN)
         profile_df_numeric = st.session_state.profile_df.copy()
         profile_df_numeric['Segment Time'] = pd.to_numeric(profile_df_numeric['Segment Time'], errors='coerce')
 
-        # 90 이상인 행만 추출 (NaN은 자동으로 False 처리)
-        long_segments = profile_df_numeric[profile_df_numeric['Segment Time'] >= 90]
+        # 1000 이상인 행만 추출 (NaN은 자동으로 False 처리)
+        very_long_segments = profile_df_numeric[profile_df_numeric['Segment Time'] >= 1000]
+        if not very_long_segments.empty:
+            st.info(f"{len(very_long_segments)} segment(s) over 1000 hours will display at 1:30 scale.")
+        
+        # 96 이상인 행만 추출 (NaN은 자동으로 False 처리)
+        long_segments = profile_df_numeric[(profile_df_numeric['Segment Time'] >= 96) & (profile_df_numeric['Segment Time'] < 1000)]
         if not long_segments.empty:
-            st.info(f"{len(long_segments)} segment(s) over 90 hours will display only the last 1 hour.")
+            st.info(f"{len(long_segments)} segment(s) over 96 hours will display exactly 96 hours.")
         
         # Also check for zero humidity segments
         zero_humidity_segments = st.session_state.profile_df[st.session_state.profile_df['Humidity(%)'] == 0]
