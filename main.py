@@ -160,7 +160,7 @@ def create_stepped_profile_graph(df):
     ax1.set_xlabel('')  # Remove x-axis label
     
     # Add (h) label at the right end of x-axis
-    ax1.text(cumulative_display_time[-1], -0.06, '(h)', horizontalalignment='right', 
+    ax1.text(cumulative_display_time[-1], -0.06, 'Time (h)', horizontalalignment='right', 
              verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Y축 범위 조정 - 온도
@@ -171,12 +171,8 @@ def create_stepped_profile_graph(df):
     y_min_temp = min_temp * 1.1  # 최소값에 여유 공간 추가
     if y_min_temp > 0:  # 모든 값이 양수인 경우
         y_min_temp = 0
-    
-    if max_temp > 100:
-        y_max_temp = max(150, max_temp * 1.1)  # At least 150 or 110% of the maximum value
-    else:
-        y_max_temp = 100
-    
+
+    y_max_temp = 120  # 항상 120으로 고정
     ax1.set_ylim(y_min_temp, y_max_temp)
     
     # 습도 Y축 범위 설정 (항상 0-100%)
@@ -210,7 +206,7 @@ def create_stepped_profile_graph(df):
                 # 점선 패턴을 더 촘촘하게 변경 (1, 1)는 1픽셀 실선, 1픽셀 공백
                 # 첫 번째 세그먼트에만 레이블 추가
                 humid_detailed = ax2.plot(times, humidity_data, 'b--', linewidth=1.5, 
-                                           dashes=[1, 1], label='Humidity(%) RH Line')[0]
+                                           dashes=[1, 1], label='Humidity(% RH Line)')[0]
             else:
                 # 나머지 세그먼트는 레이블 없이 그림
                 ax2.plot(times, humidity_data, 'b--', linewidth=1.5, dashes=[1, 1])
@@ -219,12 +215,11 @@ def create_stepped_profile_graph(df):
         humid_detailed = ax2.plot([], [], 'b--', linewidth=1.5, 
                                     dashes=[1, 1], label='Humidity(%) RH Line')[0]
     
-    # 각 구간 경계(0 제외)에 x축에 붙은 회색 수직 바 추가
+    # 각 구간 경계(0 포함)에 x축에 붙은 회색 수직 바 추가
     for i, t in enumerate(cumulative_display_time):
-        if t > 0:
-            # 더 촘촘한 점선 패턴으로 변경: (1, 1)
-            ax1.axvline(x=t, color='black', linestyle=(0, (1, 1)), alpha=0.6, ymin=-0.1, ymax=1.0)
-            ax1.plot([t, t], [0, -0.04], color='gray', linewidth=2, transform=ax1.get_xaxis_transform(), clip_on=False)
+        # 모든 t (0 포함)에 대해 바를 그림
+        ax1.axvline(x=t, color='black', linestyle=(0, (1, 1)), alpha=0.6, ymin=-0.1, ymax=1.0)
+        ax1.plot([t, t], [0, -0.04], color='gray', linewidth=2, transform=ax1.get_xaxis_transform(), clip_on=False)
     
     # Add arrows under x-axis for each segment
     arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
