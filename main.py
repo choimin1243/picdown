@@ -167,12 +167,17 @@ def create_stepped_profile_graph(df):
     min_temp = min(min(temp_points) if temp_points else 0, 0)
     max_temp = max(temp_points) if temp_points else 0
     
-    # 온도 Y축 범위 설정
+    # 온도 Y축 범위 설정 - 120 이상도 가능하도록 수정
     y_min_temp = min_temp * 1.1  # 최소값에 여유 공간 추가
     if y_min_temp > 0:  # 모든 값이 양수인 경우
         y_min_temp = 0
 
-    y_max_temp = 120  # 항상 120으로 고정
+    # 최대값이 120보다 큰 경우 동적으로 조정
+    if max_temp > 120:
+        y_max_temp = max_temp * 1.1  # 최대값에 10% 여유 공간 추가
+    else:
+        y_max_temp = 120  # 기본값 120
+    
     ax1.set_ylim(y_min_temp, y_max_temp)
     
     # 습도 Y축 범위 설정 (항상 0-100%)
