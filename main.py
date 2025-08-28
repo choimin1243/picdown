@@ -34,10 +34,10 @@ def create_stepped_profile_graph(df):
     cumulative_display_time = [0]  # Start at 0
     current_time = 0
     
-    # Calculate display time for each segment (1000+ hours compressed to 96 hours)
+    # Calculate display time for each segment (1000+ hours compressed to 30 hours)
     for i, time in enumerate(segment_times):
         if time >= 1000:
-            current_time += 80  # Always show as 96 hours for segments >= 1000h
+            current_time += 30  # Always show as 30 hours for segments >= 1000h
         else:
             current_time += time  # Show actual time
         cumulative_display_time.append(current_time)
@@ -389,7 +389,7 @@ def main():
         # Check for segments >= 1000 hours
         long_segments = profile_df_numeric[profile_df_numeric['Segment Time'] >= 1000]
         if not long_segments.empty:
-            st.info(f"{len(long_segments)} segment(s) are ≥1000 hours and will be displayed as 96 hours.")
+            st.info(f"{len(long_segments)} segment(s) are ≥1000 hours and will be displayed as 30 hours.")
         
         # Also check for zero humidity segments
         zero_humidity_segments = st.session_state.profile_df[st.session_state.profile_df['Humidity(%)'] == 0]
