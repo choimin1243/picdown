@@ -34,13 +34,29 @@ def create_stepped_profile_graph(df):
     cumulative_display_time = [0]  # Start at 0
     current_time = 0
     
-    # Calculate display time for each segment (1000+ hours compressed to 30 hours)
-    for i, time in enumerate(segment_times):
-        if time >= 1000:
-            current_time += 30  # Always show as 30 hours for segments >= 1000h
-        else:
-            current_time += time  # Show actual time
-        cumulative_display_time.append(current_time)
+    # Check if we need proportional scaling
+    has_1000plus = any(time >= 1000 for time in segment_times)
+    has_30_to_1000 = any(30 < time < 1000 for time in segment_times)
+    
+    # Calculate display time for each segment
+    if has_1000plus and has_30_to_1000:
+        # Both types exist: scale proportionally within 30h limit
+        max_time = max(segment_times)
+        for i, time in enumerate(segment_times):
+            if time >= 30:  # Scale segments >= 30 hours proportionally
+                scaled_time = (time / max_time) * 30
+                current_time += scaled_time
+            else:
+                current_time += time  # Show actual time for segments < 30h
+            cumulative_display_time.append(current_time)
+    else:
+        # Original logic: only 1000+ hours compressed to 30 hours
+        for i, time in enumerate(segment_times):
+            if time >= 1000:
+                current_time += 30  # Always show as 30 hours for segments >= 1000h
+            else:
+                current_time += time  # Show actual time
+            cumulative_display_time.append(current_time)
     
     # Temperature and humidity points
     temp_points = df['Temperature(°C)'].tolist()
