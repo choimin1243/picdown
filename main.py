@@ -19,7 +19,7 @@ def set_matplotlib_font():
     plt.rcParams['font.family'] = font_name
     plt.rcParams['axes.unicode_minus'] = False
 
-def create_stepped_profile_graph(df):
+def create_stepped_profile_graph(df, x_axis_unit='hours'):
     if len(df) < 1:
         st.error("At least 1 point is required.")
         return None
@@ -30,32 +30,73 @@ def create_stepped_profile_graph(df):
     segment_times = df['Segment Time'].tolist()
     truncated_segments = [time >= 1000 for time in segment_times]
     
+    # 시간 단위 변환 (시간 -> 분)
+    if x_axis_unit == 'minutes':
+        segment_times = [time * 60 for time in segment_times]  # 시간을 분으로 변환
+    
+    # 최소 영역 보장 (상대적 비율을 고려하여 균형잡힌 표시)
+    threshold_time = 1.0 if x_axis_unit == 'hours' else 60  # 1시간 또는 60분
+    min_display_time = threshold_time * 2  # 최소 표시 시간 (2시간 또는 120분)
+    
+    # 전체 시간 범위 계산
+    total_time = sum(segment_times)
+    max_time = max(segment_times)
+    
+    # 상대적 최소 표시 시간 계산 (전체 시간의 일정 비율)
+    relative_min_time = max(min_display_time, total_time * 0.05)  # 전체 시간의 5% 또는 최소 표시 시간 중 큰 값
+    
+    # 0.5시간 구간의 표시 크기 계산 (기준값)
+    base_0_5_time = 0.5 if x_axis_unit == 'hours' else 30  # 0.5시간 또는 30분
+    expanded_0_5_time = base_0_5_time * 2  # 0.5시간을 두배로 확장한 크기
+    reference_size = max(expanded_0_5_time, relative_min_time)  # 0.5시간 구간의 실제 표시 크기
+    
+    # 10시간 이하 기준 설정 (분 단위일 때는 600분)
+    max_equal_size = 10 if x_axis_unit == 'hours' else 600  # 10시간 또는 600분
+    
+    adjusted_segment_times = []
+    for time in segment_times:
+        if time <= max_equal_size:  # 10시간(600분) 이하인 경우 모두 0.5시간(30분) 구간과 같은 크기로 표시
+            adjusted_segment_times.append(reference_size)
+        else:
+            # 10시간(600분) 초과인 경우 최소 표시 시간보다 크게 보장
+            adjusted_segment_times.append(max(time, min_display_time))
+    
     # Calculate cumulative display time
     cumulative_display_time = [0]  # Start at 0
     current_time = 0
     
-    # Check if we need proportional scaling
-    has_1000plus = any(time >= 1000 for time in segment_times)
-    has_30_to_1000 = any(30 < time < 1000 for time in segment_times)
+    # Check if we need proportional scaling (원본 시간 기준)
+    original_segment_times = df['Segment Time'].tolist()
+    has_1000plus = any(time >= 1000 for time in original_segment_times)
+    has_30_to_1000 = any(30 < time < 1000 for time in original_segment_times)
     
     # Calculate display time for each segment
     if has_1000plus and has_30_to_1000:
         # Both types exist: scale proportionally within 30h limit
-        max_time = max(segment_times)
-        for i, time in enumerate(segment_times):
-            if time >= 30:  # Scale segments >= 30 hours proportionally
-                scaled_time = (time / max_time) * 30
+        max_time = max(original_segment_times)
+        for i, original_time in enumerate(original_segment_times):
+            if original_time >= 30:  # Scale segments >= 30 hours proportionally
+                scaled_time = (original_time / max_time) * 30
+                # 시간 단위 변환 적용
+                if x_axis_unit == 'minutes':
+                    scaled_time *= 60
                 current_time += scaled_time
             else:
-                current_time += time  # Show actual time for segments < 30h
+                # 최소 영역 보장 적용
+                current_time += adjusted_segment_times[i]
             cumulative_display_time.append(current_time)
     else:
         # Original logic: only 1000+ hours compressed to 30 hours
-        for i, time in enumerate(segment_times):
-            if time >= 1000:
-                current_time += 30  # Always show as 30 hours for segments >= 1000h
+        for i, original_time in enumerate(original_segment_times):
+            if original_time >= 1000:
+                compressed_time = 30  # Always show as 30 hours for segments >= 1000h
+                # 시간 단위 변환 적용
+                if x_axis_unit == 'minutes':
+                    compressed_time *= 60
+                current_time += compressed_time
             else:
-                current_time += time  # Show actual time
+                # 최소 영역 보장 적용
+                current_time += adjusted_segment_times[i]
             cumulative_display_time.append(current_time)
     
     # Temperature and humidity points
@@ -175,8 +216,9 @@ def create_stepped_profile_graph(df):
     ax1.set_xticks([])  # Remove x-axis ticks
     ax1.set_xlabel('')  # Remove x-axis label
     
-    # Add (h) label at the right end of x-axis
-    ax1.text(cumulative_display_time[-1], -0.06, 'Time (h)', horizontalalignment='right', 
+    # Add time unit label at the right end of x-axis
+    time_unit_label = 'Time (h)' if x_axis_unit == 'hours' else 'Time (min)'
+    ax1.text(cumulative_display_time[-1], -0.06, time_unit_label, horizontalalignment='right', 
              verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Y축 범위 조정 - 온도
@@ -228,19 +270,28 @@ def create_stepped_profile_graph(df):
     arrow_style = dict(arrowstyle='<->', color='black', linewidth=1)
     
     # Add arrows for each segment with actual time labels
-    for i in range(len(segment_times)):
+    for i in range(len(original_segment_times)):
         start = cumulative_display_time[i]
         end = cumulative_display_time[i+1]
         y_pos = -0.02
         ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
         ax1.annotate('', xy=(start, y_pos), xytext=(end, y_pos), xycoords=('data', 'axes fraction'), textcoords=('data', 'axes fraction'), arrowprops=arrow_style)
-        actual_duration = segment_times[i]
+        actual_duration = original_segment_times[i]
         # 0인 구간은 텍스트 표시하지 않음
         if actual_duration != 0:
-            if actual_duration < 1:
-                time_str = f'{actual_duration:.1f}'
+            # 시간 단위에 따라 표시 형식 조정
+            if x_axis_unit == 'minutes':
+                # 분 단위로 표시
+                if actual_duration < 1:
+                    time_str = f'{actual_duration * 60:.0f}m'
+                else:
+                    time_str = f'{int(actual_duration * 60)}m'
             else:
-                time_str = f'{int(actual_duration)}'
+                # 시간 단위로 표시
+                if actual_duration < 1:
+                    time_str = f'{actual_duration:.1f}h'
+                else:
+                    time_str = f'{int(actual_duration)}h'
             ax1.text((start + end) / 2, y_pos - 0.02, time_str, horizontalalignment='center', verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Update graph title to reflect compression
@@ -276,9 +327,28 @@ def main():
             [{'No.': 1, 'Segment Time': '', 'Temperature(°C)': '', 'Humidity(%)': ''}]
         )
     
+    # X축 단위 선택 상태 초기화
+    if 'x_axis_unit' not in st.session_state:
+        st.session_state.x_axis_unit = 'hours'
+    
     # 체크박스 선택 상태 초기화
     if 'selected_rows' not in st.session_state:
         st.session_state.selected_rows = set()
+
+    # X축 단위 선택 UI
+    st.subheader("X-axis Unit Selection")
+    x_axis_option = st.radio(
+        "Choose X-axis unit:",
+        ["Hours (시간)", "Minutes (분)"],
+        index=0 if st.session_state.x_axis_unit == 'hours' else 1,
+        horizontal=True
+    )
+    
+    # 선택된 단위를 세션 상태에 저장
+    if x_axis_option == "Hours (시간)":
+        st.session_state.x_axis_unit = 'hours'
+    else:
+        st.session_state.x_axis_unit = 'minutes'
 
     st.subheader("Profile Points (Editable)")
     
@@ -429,7 +499,7 @@ def main():
         elif len(df_with_segment) < 2:
             st.warning("At least 2 points with valid data are required to generate a graph.")
         else:
-            fig = create_stepped_profile_graph(df_with_segment)
+            fig = create_stepped_profile_graph(df_with_segment, st.session_state.x_axis_unit)
             if fig:
                 st.pyplot(fig)
                 st.markdown(get_image_download_link(fig), unsafe_allow_html=True)
