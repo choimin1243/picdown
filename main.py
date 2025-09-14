@@ -30,9 +30,11 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
     segment_times = df['Segment Time'].tolist()
     truncated_segments = [time >= 1000 for time in segment_times]
     
-    # 시간 단위 변환 (시간 -> 분)
+    # 시간 단위 변환 (시간 -> 분) - 사용자가 분 단위를 선택했을 때만 변환
     if x_axis_unit == 'minutes':
-        segment_times = [time * 60 for time in segment_times]  # 시간을 분으로 변환
+        # 원본 데이터가 시간 단위로 입력된 경우에만 분으로 변환
+        # 사용자가 분 단위로 입력한 경우는 그대로 유지
+        pass  # 분 단위 선택 시에는 변환하지 않음
     
     # 최소 영역 보장 (상대적 비율을 고려하여 균형잡힌 표시)
     threshold_time = 1.0 if x_axis_unit == 'hours' else 60  # 1시간 또는 60분
@@ -217,7 +219,7 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
     ax1.set_xlabel('')  # Remove x-axis label
     
     # Add time unit label at the right end of x-axis
-    time_unit_label = 'Time (h)' if x_axis_unit == 'hours' else 'Time (min)'
+    time_unit_label = 'Time(hour)' if x_axis_unit == 'hours' else 'Time(min)'
     ax1.text(cumulative_display_time[-1], -0.06, time_unit_label, horizontalalignment='right', 
              verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
@@ -279,19 +281,19 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
         actual_duration = original_segment_times[i]
         # 0인 구간은 텍스트 표시하지 않음
         if actual_duration != 0:
-            # 시간 단위에 따라 표시 형식 조정
+            # 시간 단위에 따라 표시 형식 조정 (m, h 제거)
             if x_axis_unit == 'minutes':
-                # 분 단위로 표시
+                # 분 단위로 표시 (60을 곱하지 않음)
                 if actual_duration < 1:
-                    time_str = f'{actual_duration * 60:.0f}m'
+                    time_str = f'{actual_duration:.1f}'
                 else:
-                    time_str = f'{int(actual_duration * 60)}m'
+                    time_str = f'{int(actual_duration)}'
             else:
-                # 시간 단위로 표시
+                # 시간 단위로 표시 (h 제거)
                 if actual_duration < 1:
-                    time_str = f'{actual_duration:.1f}h'
+                    time_str = f'{actual_duration:.1f}'
                 else:
-                    time_str = f'{int(actual_duration)}h'
+                    time_str = f'{int(actual_duration)}'
             ax1.text((start + end) / 2, y_pos - 0.02, time_str, horizontalalignment='center', verticalalignment='top', transform=ax1.get_xaxis_transform(), fontsize=10)
     
     # Update graph title to reflect compression
