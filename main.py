@@ -66,7 +66,9 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
     
     adjusted_segment_times = []
     for time in segment_times:
-        if time >= 1000:  # 1000시간 이상인 경우 30시간으로 압축
+        if time == 0:  # Segment Time이 0인 경우 구간을 표시하지 않음
+            adjusted_segment_times.append(0)
+        elif time >= 1000:  # 1000시간 이상인 경우 30시간으로 압축
             compressed_time = 30 if x_axis_unit == 'hours' else 1800  # 30시간 또는 1800분
             adjusted_segment_times.append(compressed_time)
         elif time > max_equal_size:  # 기준 초과인 경우 (시간: 10시간 초과, 분: 30분 초과)
@@ -285,14 +287,14 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
     
     # Add arrows for each segment with actual time labels
     for i in range(len(original_segment_times)):
-        start = cumulative_display_time[i]
-        end = cumulative_display_time[i+1]
-        y_pos = -0.02
-        ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
-        ax1.annotate('', xy=(start, y_pos), xytext=(end, y_pos), xycoords=('data', 'axes fraction'), textcoords=('data', 'axes fraction'), arrowprops=arrow_style)
         actual_duration = original_segment_times[i]
-        # 0인 구간은 텍스트 표시하지 않음
+        # 0인 구간은 화살표와 텍스트 모두 표시하지 않음
         if actual_duration != 0:
+            start = cumulative_display_time[i]
+            end = cumulative_display_time[i+1]
+            y_pos = -0.02
+            ax1.plot([start, start], [y_pos, y_pos - 0.01], color='black', linewidth=1, transform=ax1.get_xaxis_transform())
+            ax1.annotate('', xy=(start, y_pos), xytext=(end, y_pos), xycoords=('data', 'axes fraction'), textcoords=('data', 'axes fraction'), arrowprops=arrow_style)
             # 시간 단위에 따라 표시 형식 조정 (m, h 제거)
             if x_axis_unit == 'minutes':
                 # 분 단위로 표시 (60을 곱하지 않음)
