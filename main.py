@@ -60,14 +60,21 @@ def create_stepped_profile_graph(df, x_axis_unit='hours'):
     if x_axis_unit == 'hours':
         has_long_segments = any(time >= 30 for time in segment_times)
         has_very_long_segments = any(time >= 1000 for time in segment_times)
+        # 시간 단위에서 최대값이 10시간 이하인지 확인
+        max_time_hours = max(segment_times) if segment_times else 0
+        all_small_hours = max_time_hours <= 10
     else:  # minutes
         has_long_segments = any(time >= 1800 for time in segment_times)  # 30분 = 1800분
         has_very_long_segments = any(time >= 60000 for time in segment_times)  # 1000분 = 60000분
+        all_small_hours = False  # 분 단위에서는 적용하지 않음
     
     adjusted_segment_times = []
     for time in segment_times:
         if time == 0:  # Segment Time이 0인 경우 구간을 표시하지 않음
             adjusted_segment_times.append(0)
+        elif x_axis_unit == 'hours' and all_small_hours:  # 시간 단위이고 모든 구간이 10시간 이하인 경우
+            # 조건을 생각하지 않고 단순히 비례하게 표시
+            adjusted_segment_times.append(time)
         elif time >= 1000:  # 1000시간 이상인 경우 30시간으로 압축
             compressed_time = 30 if x_axis_unit == 'hours' else 1800  # 30시간 또는 1800분
             adjusted_segment_times.append(compressed_time)
